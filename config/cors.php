@@ -20,8 +20,8 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
-        'https://billing.drewb.com',
-        'https://billing-ng.drewb.com',
+        'https://bux.drewb.com',
+        'https://bux-demo.drewb.com',
         'http://localhost:4200',
     ],
 
