@@ -7,7 +7,6 @@ use App\Http\Requests\PasswordResetCodeRequest;
 use App\Http\Requests\ChangePasswordRequest;
 use App\Http\Requests\RegisterRequest;
 use App\Mail\ForgotPasswordEmail;
-use App\Mail\VerificationEmail;
 use App\Models\User;
 use App\Services\VerificationCodeService;
 use App\Traits\HttpResponses;
@@ -15,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
 {
@@ -28,7 +28,7 @@ class AuthController extends Controller
             return $this->error(['errors' => $validator->errors()], 'Error(s) were found.');
         }
 
-        if (Auth::attempt($request->only('email', 'password'))) {
+        if (Auth::attempt($validator->safe(['email', 'password']))) {
             // user is valid
             $request->session()->regenerate();
 
@@ -43,7 +43,7 @@ class AuthController extends Controller
             ]);
         }
 
-        return $this->error(['errors' => []], 'Invalid credentials.', 200);
+        return $this->error(['errors' => ['email' => '', 'password' => '']], 'Invalid credentials.', 200);
     }
 
     public function register(Request $request)
@@ -149,26 +149,33 @@ class AuthController extends Controller
         Auth::logout();
 
         $request->session()->invalidate();
-        $request->session()->regenerateToken();
 
         return $this->success([], '', 200);
     }
 
-    public function logout()
+    public function logout(Request $request)
     {
         $user = User::find(Auth::id());
 
-        $user->currentAccessToken()->delete();
+        //$user->currentAccessToken()->delete();
 
         Auth::logout();
+        $request->session()->invalidate();
 
-        return $this->success([
-            'message' => 'You have been logged out. ',
-        ]);
+        return $this->success([], 'You have been logged out.');
     }
 
     public function whoami()
     {
-        return $this->success(["user" => Auth::user(), '']);
+        $user = Auth::user();
+
+        if ($user) {
+           return $this->success([
+                'user' => $user,
+                'token' => $user->createToken('Auth token for ' . $user->name)->plainTextToken,
+            ]);
+        } else {
+            return $this->success([]);
+        }
     }
 }
