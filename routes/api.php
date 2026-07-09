@@ -4,10 +4,13 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\LineItemController;
+use App\Http\Controllers\PasskeyController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\UtilityController;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Route;
+use Laravel\Passkeys\Http\Controllers\PasskeyLoginController;
+use Laravel\Passkeys\Http\Controllers\PasskeyRegistrationController;
 
 //public routes
 Route::post('/login', [AuthController::class, 'login'])
@@ -20,6 +23,12 @@ Route::post('/update-password', [AuthController::class, 'changePassword'])
     ->middleware(ThrottleRequests::using('login'));
 
 Route::get('/whoami', [AuthController::class, 'whoami']);
+
+// passkey login (public, mirrors password login's throttling)
+Route::get('/webauthn/login/options', [PasskeyLoginController::class, 'index'])
+    ->middleware(ThrottleRequests::using('login'));
+Route::post('/webauthn/login', [PasskeyLoginController::class, 'store'])
+    ->middleware(ThrottleRequests::using('login'));
 
 
 // protected routes
@@ -48,4 +57,9 @@ Route::group(['middleware' => ['auth:sanctum']], function() {
     Route::get('/completions', [UtilityController::class, 'completions']);
     //Route::get('/line_item', LineItemController::class)->except(['edit', 'create']);
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    Route::get('/webauthn/passkeys', [PasskeyController::class, 'index']);
+    Route::get('/webauthn/register/options', [PasskeyRegistrationController::class, 'index']);
+    Route::post('/webauthn/register', [PasskeyRegistrationController::class, 'store']);
+    Route::delete('/webauthn/passkeys/{passkey}', [PasskeyRegistrationController::class, 'destroy']);
 });
