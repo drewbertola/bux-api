@@ -155,11 +155,15 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $user = User::find(Auth::id());
+        // This route sits behind auth:sanctum, so Auth::user() (not a fresh
+        // User::find()) is required to get the instance Sanctum's guard
+        // resolved, which is the one with currentAccessToken() populated.
+        // Auth::logout() isn't callable here either: after auth:sanctum
+        // authenticates, the default guard is 'sanctum' (a RequestGuard),
+        // which has no logout() method — invalidating the session below is
+        // sufficient to end a session-based login.
+        Auth::user()->currentAccessToken()->delete();
 
-        //$user->currentAccessToken()->delete();
-
-        Auth::logout();
         $request->session()->invalidate();
 
         return $this->success([], 'You have been logged out.');
