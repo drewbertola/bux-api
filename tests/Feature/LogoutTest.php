@@ -39,3 +39,20 @@ test('logout revokes the current token', function () {
         'id' => $token->accessToken->id,
     ]);
 });
+
+test('logout does not crash when authenticated via the session guard', function () {
+    $user = User::factory()->create();
+
+    // acting as a user on the 'web' guard mirrors the session cookie a
+    // real browser would hold after login — this is the guard Sanctum
+    // checks *before* falling back to the bearer token, and it has no
+    // real access token of its own (Auth::user()->currentAccessToken()
+    // would be a TransientToken with no delete() method in this case).
+    $this->actingAs($user)->postJson('/api/logout')->assertOk();
+
+    // asserted against the same guard instance rather than a follow-up
+    // simulated request: the test harness shares session state across
+    // simulated requests within one test in ways a real browser
+    // round-trip wouldn't.
+    $this->assertGuest('web');
+});

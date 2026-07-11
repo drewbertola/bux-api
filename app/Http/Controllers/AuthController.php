@@ -155,14 +155,23 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        // This route sits behind auth:sanctum, so Auth::user() (not a fresh
-        // User::find()) is required to get the instance Sanctum's guard
-        // resolved, which is the one with currentAccessToken() populated.
-        // Auth::logout() isn't callable here either: after auth:sanctum
+        // Delete all of the user's tokens rather than
+        // Auth::user()->currentAccessToken(): Sanctum's guard checks the
+        // session ('web') guard before the bearer token, and a
+        // session-resolved user's "current" token is a TransientToken with
+        // no delete() method at all — that would fatal-error here for any
+        // request authenticated via the session cookie, which is the
+        // common case for this app's browser-based SPA.
+        //
+        // Bare Auth::logout() isn't callable here: after auth:sanctum
         // authenticates, the default guard is 'sanctum' (a RequestGuard),
-        // which has no logout() method — invalidating the session below is
-        // sufficient to end a session-based login.
-        Auth::user()->currentAccessToken()->delete();
+        // which has no logout() method. Target the 'web' guard directly —
+        // the one actually backing the session — instead. Flushing the
+        // session alone isn't enough either: it doesn't clear the guard's
+        // already-resolved in-memory user for the rest of this request.
+        User::find(Auth::id())?->tokens()->delete();
+
+        Auth::guard('web')->logout();
 
         $request->session()->invalidate();
 
