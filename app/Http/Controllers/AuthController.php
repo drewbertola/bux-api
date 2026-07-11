@@ -146,6 +146,10 @@ class AuthController extends Controller
 
         $user->update($data);
 
+        // revoke any outstanding tokens so a stolen bearer token can't
+        // outlive a password change
+        $user->tokens()->delete();
+
         Auth::logout();
 
         $request->session()->invalidate();

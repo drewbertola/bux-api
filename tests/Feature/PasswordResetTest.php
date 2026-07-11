@@ -98,3 +98,21 @@ test('an authenticated user can change their password without a code', function 
     $user->refresh();
     expect(Hash::check('new-password-1', $user->password))->toBeTrue();
 });
+
+test('changing the password revokes the user\'s existing tokens', function () {
+    $user = User::factory()->create(['password' => Hash::make('old-password')]);
+    $token = $user->createToken('test');
+
+    $this->actingAs($user)->postJson('/api/update-password', [
+        'email' => $user->email,
+        'newPassword' => 'new-password-1',
+        'newPassword2' => 'new-password-1',
+    ])->assertOk();
+
+    // a token issued before the password change must not survive it —
+    // otherwise a stolen bearer token would outlive the user's own
+    // remediation
+    $this->assertDatabaseMissing('personal_access_tokens', [
+        'id' => $token->accessToken->id,
+    ]);
+});
