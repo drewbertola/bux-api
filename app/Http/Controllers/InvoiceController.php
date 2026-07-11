@@ -33,6 +33,18 @@ class InvoiceController
         return $this->success(['invoice' => $invoice]);
     }
 
+    /**
+     * Display the invoices belonging to a single customer.
+     */
+    public function customer(string $customerId)
+    {
+        $data = InvoiceResource::collection(
+            Invoice::where('customerId', $customerId)->orderBy('id', 'desc')->get()
+        );
+
+        return $this->success(['invoices' => $data]);
+    }
+
     public function save(Request $request)
     {
         // handle requests from timed out logins

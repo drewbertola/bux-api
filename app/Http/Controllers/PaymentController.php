@@ -30,6 +30,18 @@ class PaymentController
         return $this->success(['payment' => $payment]);
     }
 
+    /**
+     * Display the payments belonging to a single customer.
+     */
+    public function customer(string $customerId)
+    {
+        $data = PaymentResource::collection(
+            Payment::where('customerId', $customerId)->orderBy('id', 'desc')->get()
+        );
+
+        return $this->success(['payments' => $data]);
+    }
+
     public function save(Request $request)
     {
         // handle requests from timed out logins
