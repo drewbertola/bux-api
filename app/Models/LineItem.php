@@ -24,8 +24,17 @@ class LineItem extends Model
         'updated_at',
     ];
 
+    protected $appends = [
+        'customerId',
+    ];
+
     public function invoice()
     {
         return $this->belongsTo(Invoice::class, 'invoiceId');
+    }
+
+    public function getCustomerIdAttribute()
+    {
+        return $this->invoice?->customerId ?? 0;
     }
 }
