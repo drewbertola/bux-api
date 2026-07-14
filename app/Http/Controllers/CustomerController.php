@@ -30,6 +30,10 @@ class CustomerController
     {
         $customer = Customer::find($id);
 
+        if (empty($customer)) {
+            return $this->error([], 'Customer not found.');
+        }
+
         return $this->success(['customer' => $customer]);
     }
 
@@ -60,6 +64,11 @@ class CustomerController
             $customer = Customer::create($data);
         } else {
             $customer = Customer::find($customerId);
+
+            if (empty($customer)) {
+                return $this->error([], 'Customer not found.');
+            }
+
             $customer->update($data);
         }
 

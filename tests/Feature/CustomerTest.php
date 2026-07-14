@@ -51,6 +51,27 @@ test('save updates an existing customer', function () {
     $this->assertDatabaseCount('customer', 1);
 });
 
+test('get fails gracefully for a nonexistent customer', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->getJson('/api/customer/999999');
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
+test('save fails gracefully when updating a nonexistent customer', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->postJson('/api/customer/save', [
+        'id' => 999999,
+        'name' => 'Ghost Customer',
+    ]);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
 test('save rejects a name longer than 64 characters', function () {
     $user = User::factory()->create();
 

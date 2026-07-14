@@ -32,6 +32,10 @@ class LineItemController
     {
         $lineItem = LineItem::find($id);
 
+        if (empty($lineItem)) {
+            return $this->error([], 'Line item not found.');
+        }
+
         return $this->success(['lineItem' => $lineItem]);
     }
 
@@ -59,6 +63,11 @@ class LineItemController
             $lineItem = LineItem::create($data);
         } else {
             $lineItem = LineItem::find($lineItemId);
+
+            if (empty($lineItem)) {
+                return $this->error([], 'Line item not found.');
+            }
+
             $lineItem->update($data);
         }
 

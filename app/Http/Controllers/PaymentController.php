@@ -27,6 +27,10 @@ class PaymentController
     {
         $payment = Payment::find($id);
 
+        if (empty($payment)) {
+            return $this->error([], 'Payment not found.');
+        }
+
         return $this->success(['payment' => $payment]);
     }
 
@@ -66,6 +70,11 @@ class PaymentController
             $payment = Payment::create($data);
         } else {
             $payment = Payment::find($paymentId);
+
+            if (empty($payment)) {
+                return $this->error([], 'Payment not found.');
+            }
+
             $payment->update($data);
         }
 

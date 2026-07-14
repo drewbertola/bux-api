@@ -68,6 +68,30 @@ test('save updates an existing payment', function () {
     $this->assertDatabaseCount('payment', 1);
 });
 
+test('get fails gracefully for a nonexistent payment', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->getJson('/api/payment/999999');
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
+test('save fails gracefully when updating a nonexistent payment', function () {
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create();
+
+    $response = $this->actingAs($user)->postJson('/api/payment/save', [
+        'id' => 999999,
+        'customerId' => $customer->id,
+        'date' => '2026-01-15',
+        'method' => 'Card',
+    ]);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
 test('save rejects an invalid method', function () {
     $user = User::factory()->create();
     $customer = Customer::factory()->create();

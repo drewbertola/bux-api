@@ -76,6 +76,31 @@ test('save updates an existing line item and recalculates the invoice amount', f
     expect((float) $invoice->fresh()->amount)->toBe(50.0);
 });
 
+test('get fails gracefully for a nonexistent line item', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->getJson('/api/line_item/999999');
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
+test('save fails gracefully when updating a nonexistent line item', function () {
+    $user = User::factory()->create();
+    $invoice = Invoice::factory()->create();
+
+    $response = $this->actingAs($user)->postJson('/api/line_item/save', [
+        'id' => 999999,
+        'invoiceId' => $invoice->id,
+        'price' => 10,
+        'quantity' => 1,
+        'description' => 'Ghost item',
+    ]);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
 test('save rejects a description longer than 64 characters', function () {
     $user = User::factory()->create();
     $invoice = Invoice::factory()->create();

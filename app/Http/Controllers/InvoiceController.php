@@ -30,6 +30,10 @@ class InvoiceController
     {
         $invoice = Invoice::find($id);
 
+        if (empty($invoice)) {
+            return $this->error([], 'Invoice not found.');
+        }
+
         return $this->success(['invoice' => $invoice]);
     }
 
@@ -69,6 +73,11 @@ class InvoiceController
             $invoice = Invoice::create($data);
         } else {
             $invoice = Invoice::find($invoiceId);
+
+            if (empty($invoice)) {
+                return $this->error([], 'Invoice not found.');
+            }
+
             $invoice->update($data);
         }
 
@@ -86,6 +95,10 @@ class InvoiceController
         }
 
         $invoice = Invoice::find($id);
+
+        if (empty($invoice)) {
+            return $this->error([], 'Invoice not found.');
+        }
 
         $invoice->emailed = ($invoice->emailed === 'Y') ? 'N' : 'Y';
         $invoice->save();

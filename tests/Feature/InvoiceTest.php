@@ -67,6 +67,38 @@ test('save updates an existing invoice', function () {
     $this->assertDatabaseCount('invoice', 1);
 });
 
+test('get fails gracefully for a nonexistent invoice', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->getJson('/api/invoice/999999');
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
+test('save fails gracefully when updating a nonexistent invoice', function () {
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create();
+
+    $response = $this->actingAs($user)->postJson('/api/invoice/save', [
+        'id' => 999999,
+        'customerId' => $customer->id,
+        'date' => '2026-01-15',
+    ]);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
+test('toggleSent fails gracefully for a nonexistent invoice', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->getJson('/api/invoice/sent/999999');
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
 test('save rejects a missing date', function () {
     $user = User::factory()->create();
     $customer = Customer::factory()->create();
