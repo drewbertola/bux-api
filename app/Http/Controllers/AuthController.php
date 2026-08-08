@@ -133,9 +133,26 @@ class AuthController extends Controller
                 return $this->error(['errors' => [
                     'errors' => ['token' => ['The code (from our email) was not entered.']]
                 ]], 'One or more errors were encountered.');
-            } elseif ($user->verification_code !== $request->input('token')) {
+            } elseif (! hash_equals($user->verification_code, (string) $request->input('token'))) {
                 return $this->error([
                     'errors' => ['token' => ['The code did not match our records.']],
+                ], 'One or more errors were encountered.');
+            }
+        } else {
+            // authenticated self-service change: a session cookie or bearer
+            // token alone must not be enough to take over the account, so
+            // the caller has to prove they still know the current password
+            $currentPassword = $request->input('password');
+
+            if (empty($currentPassword)) {
+                return $this->error([
+                    'errors' => ['password' => ['Your current password is required.']]
+                ], 'One or more errors were encountered.');
+            }
+
+            if (! Hash::check($currentPassword, $user->password)) {
+                return $this->error([
+                    'errors' => ['password' => ['Your current password is incorrect.']]
                 ], 'One or more errors were encountered.');
             }
         }
