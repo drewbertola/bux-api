@@ -85,16 +85,22 @@ class AuthController extends Controller
 
         $user = User::where('email', $validator->safe()->only('email'))->first();
 
-        $data = ['verification_code' => VerificationCodeService::generate()];
+        // respond identically whether or not the address is registered —
+        // only send mail (and burn a code) when there's actually a user,
+        // so this endpoint can't be used to enumerate accounts
+        if ($user) {
+            $user->update([
+                'verification_code' => VerificationCodeService::generate(),
+                'verification_code_expires_at' => now()->addMinutes(30),
+            ]);
 
-        $user->update($data);
-
-        Mail::to($user->email)->send(new ForgotPasswordEmail($user));
+            Mail::to($user->email)->send(new ForgotPasswordEmail($user));
+        }
 
         return $this->success(
             [],
-            'A password recovery email has been sent.  Please check your ' .
-            'inbox and spam folders.'
+            'If that email address is in our system, a password recovery ' .
+            'email has been sent.  Please check your inbox and spam folders.'
         );
     }
 
@@ -129,13 +135,23 @@ class AuthController extends Controller
                 ], 'The account could not be found.');
             }
 
-            if (empty($request->only('token'))) {
+            $token = (string) $request->input('token');
+
+            if ($token === '') {
                 return $this->error(['errors' => [
                     'errors' => ['token' => ['The code (from our email) was not entered.']]
                 ]], 'One or more errors were encountered.');
-            } elseif (! hash_equals($user->verification_code, (string) $request->input('token'))) {
+            } elseif (empty($user->verification_code) || ! hash_equals($user->verification_code, $token)) {
+                // the empty($user->verification_code) check matters on its
+                // own: a freshly-created account's code defaults to '', and
+                // without this a blank token would hash_equals('', '')
+                // straight through as "correct" for any such account
                 return $this->error([
                     'errors' => ['token' => ['The code did not match our records.']],
+                ], 'One or more errors were encountered.');
+            } elseif (empty($user->verification_code_expires_at) || $user->verification_code_expires_at->isPast()) {
+                return $this->error([
+                    'errors' => ['token' => ['This code has expired.  Please request a new one.']],
                 ], 'One or more errors were encountered.');
             }
         } else {
@@ -160,6 +176,7 @@ class AuthController extends Controller
         $data = [];
         $data['password'] = $newPassword;
         $data['verification_code'] = '';
+        $data['verification_code_expires_at'] = null;
 
         $user->update($data);
 
@@ -204,6 +221,12 @@ class AuthController extends Controller
         $user = Auth::user();
 
         if ($user) {
+            // mirror login()'s "one live token at a time" convention —
+            // otherwise a client that polls this read-only endpoint would
+            // accumulate an ever-growing, never-expiring set of valid
+            // bearer tokens for the account
+            $user->tokens()->delete();
+
            return $this->success([
                 'user' => $user,
                 'token' => $user->createToken('Auth token for ' . $user->name)->plainTextToken,

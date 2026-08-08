@@ -20,18 +20,73 @@ test('requesting a reset code emails the user and stores a verification code', f
     Mail::assertSent(ForgotPasswordEmail::class, fn ($mail) => $mail->hasTo($user->email));
 });
 
-test('requesting a reset code fails for an unknown email', function () {
+test('requesting a reset code for an unknown email responds the same as a known one, without sending mail', function () {
     Mail::fake();
 
     $response = $this->postJson('/api/forgot', ['email' => 'nobody@example.com']);
 
-    $response->assertJsonPath('status', 'failed');
+    // the response must not reveal whether the address is registered —
+    // otherwise this endpoint becomes an account enumeration oracle
+    $response->assertOk();
+    $response->assertJsonPath('status', 'success');
     Mail::assertNothingSent();
 });
 
-test('a guest can reset their password with a valid code', function () {
+test('requesting a reset code sets an expiry', function () {
+    Mail::fake();
+    $user = User::factory()->create();
+
+    $this->postJson('/api/forgot', ['email' => $user->email])->assertOk();
+
+    $user->refresh();
+    expect($user->verification_code_expires_at)->not->toBeNull();
+    expect($user->verification_code_expires_at->isFuture())->toBeTrue();
+});
+
+test('an account that never requested a code cannot be reset with a blank token', function () {
+    // a fresh account's verification_code defaults to '' — an empty
+    // token must never be treated as "correct" for it
+    $user = User::factory()->create([
+        'password' => Hash::make('old-password'),
+    ]);
+
+    $response = $this->postJson('/api/update-password', [
+        'email' => $user->email,
+        'token' => '',
+        'newPassword' => 'new-password-1',
+        'newPassword2' => 'new-password-1',
+    ]);
+
+    $response->assertJsonPath('status', 'failed');
+
+    $user->refresh();
+    expect(Hash::check('old-password', $user->password))->toBeTrue();
+});
+
+test('resetting the password fails with an expired code', function () {
     $user = User::factory()->create([
         'verification_code' => 'ABC12345',
+        'verification_code_expires_at' => now()->subMinute(),
+        'password' => Hash::make('old-password'),
+    ]);
+
+    $response = $this->postJson('/api/update-password', [
+        'email' => $user->email,
+        'token' => 'ABC12345',
+        'newPassword' => 'new-password-1',
+        'newPassword2' => 'new-password-1',
+    ]);
+
+    $response->assertJsonPath('status', 'failed');
+
+    $user->refresh();
+    expect(Hash::check('old-password', $user->password))->toBeTrue();
+});
+
+test('a guest can reset their password with a valid, unexpired code', function () {
+    $user = User::factory()->create([
+        'verification_code' => 'ABC12345',
+        'verification_code_expires_at' => now()->addMinutes(10),
         'password' => Hash::make('old-password'),
     ]);
 

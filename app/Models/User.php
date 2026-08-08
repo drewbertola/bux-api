@@ -25,6 +25,7 @@ class User extends Authenticatable implements PasskeyUser
         'email',
         'password',
         'verification_code',
+        'verification_code_expires_at',
         'email_verified_at',
     ];
 
@@ -37,6 +38,8 @@ class User extends Authenticatable implements PasskeyUser
         'email_verified_at',
         'password',
         'remember_token',
+        'verification_code',
+        'verification_code_expires_at',
         'created_at',
         'updated_at',
     ];
@@ -58,6 +61,7 @@ class User extends Authenticatable implements PasskeyUser
     {
         return [
             'email_verified_at' => 'datetime',
+            'verification_code_expires_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
