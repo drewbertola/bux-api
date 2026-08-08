@@ -169,7 +169,10 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    // defaults to secure everywhere except local/testing, so a deploy
+    // that forgets to set SESSION_SECURE_COOKIE doesn't silently allow
+    // the session cookie over plain HTTP
+    'secure' => env('SESSION_SECURE_COOKIE', ! in_array(env('APP_ENV', 'production'), ['local', 'testing'], true)),
 
     /*
     |--------------------------------------------------------------------------
