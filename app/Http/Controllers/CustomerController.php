@@ -28,7 +28,7 @@ class CustomerController
      */
     public function get(string $id)
     {
-        $customer = Customer::find($id);
+        $customer = Customer::where('id', $id)->where('userId', Auth::id())->first();
 
         if (empty($customer)) {
             return $this->error([], 'Customer not found.');
@@ -61,9 +61,10 @@ class CustomerController
         unset($data['updated_at']);
 
         if (empty($customerId)) {
+            $data['userId'] = Auth::id();
             $customer = Customer::create($data);
         } else {
-            $customer = Customer::find($customerId);
+            $customer = Customer::where('id', $customerId)->where('userId', Auth::id())->first();
 
             if (empty($customer)) {
                 return $this->error([], 'Customer not found.');
@@ -83,12 +84,19 @@ class CustomerController
      */
     public function delete(Customer $customer)
     {
+        abort_unless($customer->userId === Auth::id(), 403);
+
         return $customer->delete();
     }
 
     public function getBalanceData(string $customerId)
     {
-        $customer = Customer::find($customerId);
+        $customer = Customer::where('id', $customerId)->where('userId', Auth::id())->first();
+
+        if (empty($customer)) {
+            return $this->error([], 'Customer not found.');
+        }
+
         $invoices = Invoice::where('customerId', $customerId)->get();
         $payments = Payment::where('customerId', $customerId)->get();
 
@@ -161,7 +169,9 @@ class CustomerController
             })
             ->leftJoinSub($payment, 'p', function (JoinClause $join) {
                 $join->on('customer.id', '=', 'p.customerId');
-            })->get()->toArray();
+            })
+            ->where('customer.userId', Auth::id())
+            ->get()->toArray();
 
         return $this->success(['customers' => $results]);
     }

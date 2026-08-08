@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Traits\HttpResponses;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class UtilityController extends Controller
@@ -13,6 +14,7 @@ class UtilityController extends Controller
     {
         $customers = DB::table('customer')
             ->select('id as value', 'name as label')
+            ->where('userId', Auth::id())
             ->orderByDesc('archive')
             ->orderBy('name')
             ->get();

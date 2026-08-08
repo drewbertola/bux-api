@@ -12,6 +12,7 @@ class Customer extends Model
     protected $table = 'customer';
 
     protected $fillable = [
+        'userId',
         'name',
         'bAddress1',
         'bAddress2',
@@ -39,4 +40,9 @@ class Customer extends Model
         'created_at',
         'updated_at',
     ];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'userId');
+    }
 }

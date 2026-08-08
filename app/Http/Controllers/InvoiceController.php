@@ -21,14 +21,18 @@ class InvoiceController
      */
     public function index()
     {
-        $data = InvoiceResource::collection(Invoice::orderBy('id', 'desc')->get());
+        $data = InvoiceResource::collection(
+            Invoice::whereHas('customer', fn ($q) => $q->where('userId', Auth::id()))
+                ->orderBy('id', 'desc')->get()
+        );
 
         return $this->success(['invoices' => $data]);
     }
 
     public function get(string $id)
     {
-        $invoice = Invoice::find($id);
+        $invoice = Invoice::whereHas('customer', fn ($q) => $q->where('userId', Auth::id()))
+            ->where('id', $id)->first();
 
         if (empty($invoice)) {
             return $this->error([], 'Invoice not found.');
@@ -42,6 +46,12 @@ class InvoiceController
      */
     public function customer(string $customerId)
     {
+        $owned = Customer::where('id', $customerId)->where('userId', Auth::id())->exists();
+
+        if (! $owned) {
+            return $this->error([], 'Customer not found.');
+        }
+
         $data = InvoiceResource::collection(
             Invoice::where('customerId', $customerId)->orderBy('id', 'desc')->get()
         );
@@ -65,6 +75,14 @@ class InvoiceController
         $data = $validator->safe()->toArray();
         $invoiceId = $data['id'];
 
+        $ownsCustomer = Customer::where('id', $data['customerId'])->where('userId', Auth::id())->exists();
+
+        if (! $ownsCustomer) {
+            return $this->error([
+                'errors' => ['customerId' => ['Customer not found.']]
+            ], 'One or more errors were encountered.');
+        }
+
         unset($data['id']);
         unset($data['created_at']);
         unset($data['updated_at']);
@@ -72,7 +90,8 @@ class InvoiceController
         if (empty($invoiceId)) {
             $invoice = Invoice::create($data);
         } else {
-            $invoice = Invoice::find($invoiceId);
+            $invoice = Invoice::whereHas('customer', fn ($q) => $q->where('userId', Auth::id()))
+                ->where('id', $invoiceId)->first();
 
             if (empty($invoice)) {
                 return $this->error([], 'Invoice not found.');
@@ -94,7 +113,8 @@ class InvoiceController
             return redirect('/');
         }
 
-        $invoice = Invoice::find($id);
+        $invoice = Invoice::whereHas('customer', fn ($q) => $q->where('userId', Auth::id()))
+            ->where('id', $id)->first();
 
         if (empty($invoice)) {
             return $this->error([], 'Invoice not found.');
@@ -108,7 +128,20 @@ class InvoiceController
 
     public function pdf($id)
     {
-        $invoice = Invoice::where('id', $id)->first();
+        // this action is not currently routed, but keep it locked down the
+        // same as every other resource endpoint so wiring up a route later
+        // doesn't silently reintroduce unauthenticated/cross-tenant access
+        if (empty(Auth::user())) {
+            return redirect('/');
+        }
+
+        $invoice = Invoice::whereHas('customer', fn ($q) => $q->where('userId', Auth::id()))
+            ->where('id', $id)->first();
+
+        if (empty($invoice)) {
+            return $this->error([], 'Invoice not found.');
+        }
+
         $lineItems = LineItem::where('invoiceId', $invoice->id)->get();
         $customer = Customer::where('id', $invoice->customerId)->first();
 
@@ -129,6 +162,8 @@ class InvoiceController
      */
     public function delete(Invoice $invoice)
     {
+        abort_unless($invoice->customer?->userId === Auth::id(), 403);
+
         return $invoice->delete();
     }
 }

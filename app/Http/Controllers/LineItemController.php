@@ -21,6 +21,14 @@ class LineItemController
      */
     public function index(string $invoiceId)
     {
+        $ownsInvoice = Invoice::where('id', $invoiceId)
+            ->whereHas('customer', fn ($q) => $q->where('userId', Auth::id()))
+            ->exists();
+
+        if (! $ownsInvoice) {
+            return $this->error([], 'Invoice not found.');
+        }
+
         $data = LineItemResource::collection(
             LineItem::where('invoiceId', $invoiceId)->get()
         );
@@ -30,7 +38,8 @@ class LineItemController
 
     public function get(string $id)
     {
-        $lineItem = LineItem::find($id);
+        $lineItem = LineItem::whereHas('invoice.customer', fn ($q) => $q->where('userId', Auth::id()))
+            ->where('id', $id)->first();
 
         if (empty($lineItem)) {
             return $this->error([], 'Line item not found.');
@@ -55,6 +64,16 @@ class LineItemController
         $data = $validator->safe()->toArray();
         $lineItemId = $data['id'];
 
+        $ownsInvoice = Invoice::where('id', $data['invoiceId'])
+            ->whereHas('customer', fn ($q) => $q->where('userId', Auth::id()))
+            ->exists();
+
+        if (! $ownsInvoice) {
+            return $this->error([
+                'errors' => ['invoiceId' => ['Invoice not found.']]
+            ], 'One or more errors were encountered.');
+        }
+
         unset($data['id']);
         unset($data['created_at']);
         unset($data['updated_at']);
@@ -62,7 +81,8 @@ class LineItemController
         if (empty($lineItemId)) {
             $lineItem = LineItem::create($data);
         } else {
-            $lineItem = LineItem::find($lineItemId);
+            $lineItem = LineItem::whereHas('invoice.customer', fn ($q) => $q->where('userId', Auth::id()))
+                ->where('id', $lineItemId)->first();
 
             if (empty($lineItem)) {
                 return $this->error([], 'Line item not found.');

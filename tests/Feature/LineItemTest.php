@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\LineItem;
 use App\Models\User;
@@ -14,8 +15,9 @@ test('line item routes require authentication', function () {
 
 test('index lists line items for an invoice only', function () {
     $user = User::factory()->create();
-    $invoiceA = Invoice::factory()->create();
-    $invoiceB = Invoice::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $user->id]);
+    $invoiceA = Invoice::factory()->create(['customerId' => $customer->id]);
+    $invoiceB = Invoice::factory()->create(['customerId' => $customer->id]);
     LineItem::factory()->create(['invoiceId' => $invoiceA->id]);
     LineItem::factory()->create(['invoiceId' => $invoiceB->id]);
 
@@ -27,9 +29,24 @@ test('index lists line items for an invoice only', function () {
     expect($lineItems[0]['invoiceId'])->toBe((string) $invoiceA->id);
 });
 
+test('a user cannot list another user\'s line items by invoice', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $other->id]);
+    $invoice = Invoice::factory()->create(['customerId' => $customer->id]);
+    LineItem::factory()->create(['invoiceId' => $invoice->id]);
+
+    $response = $this->actingAs($user)->getJson('/api/line_item/invoice/' . $invoice->id);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
 test('get returns a single line item', function () {
     $user = User::factory()->create();
-    $lineItem = LineItem::factory()->create(['description' => 'Widget']);
+    $customer = Customer::factory()->create(['userId' => $user->id]);
+    $invoice = Invoice::factory()->create(['customerId' => $customer->id]);
+    $lineItem = LineItem::factory()->create(['invoiceId' => $invoice->id, 'description' => 'Widget']);
 
     $response = $this->actingAs($user)->getJson('/api/line_item/' . $lineItem->id);
 
@@ -37,9 +54,23 @@ test('get returns a single line item', function () {
     $response->assertJsonPath('lineItem.description', 'Widget');
 });
 
+test('a user cannot view another user\'s line item', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $other->id]);
+    $invoice = Invoice::factory()->create(['customerId' => $customer->id]);
+    $lineItem = LineItem::factory()->create(['invoiceId' => $invoice->id]);
+
+    $response = $this->actingAs($user)->getJson('/api/line_item/' . $lineItem->id);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
 test('save creates a new line item when id is 0 and recalculates the invoice amount', function () {
     $user = User::factory()->create();
-    $invoice = Invoice::factory()->create(['amount' => 0]);
+    $customer = Customer::factory()->create(['userId' => $user->id]);
+    $invoice = Invoice::factory()->create(['customerId' => $customer->id, 'amount' => 0]);
 
     $response = $this->actingAs($user)->postJson('/api/line_item/save', [
         'id' => 0,
@@ -54,9 +85,28 @@ test('save creates a new line item when id is 0 and recalculates the invoice amo
     expect((float) $invoice->fresh()->amount)->toBe(30.0);
 });
 
+test('a user cannot create a line item against another user\'s invoice', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $other->id]);
+    $invoice = Invoice::factory()->create(['customerId' => $customer->id, 'amount' => 0]);
+
+    $response = $this->actingAs($user)->postJson('/api/line_item/save', [
+        'id' => 0,
+        'invoiceId' => $invoice->id,
+        'price' => 10,
+        'quantity' => 3,
+        'description' => 'Widget',
+    ]);
+
+    $response->assertJsonPath('status', 'failed');
+    $this->assertDatabaseMissing('line_item', ['invoiceId' => $invoice->id]);
+});
+
 test('save updates an existing line item and recalculates the invoice amount', function () {
     $user = User::factory()->create();
-    $invoice = Invoice::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $user->id]);
+    $invoice = Invoice::factory()->create(['customerId' => $customer->id]);
     $lineItem = LineItem::factory()->create([
         'invoiceId' => $invoice->id,
         'price' => 10,
@@ -76,6 +126,30 @@ test('save updates an existing line item and recalculates the invoice amount', f
     expect((float) $invoice->fresh()->amount)->toBe(50.0);
 });
 
+test('a user cannot update another user\'s line item', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $other->id]);
+    $invoice = Invoice::factory()->create(['customerId' => $customer->id]);
+    $lineItem = LineItem::factory()->create([
+        'invoiceId' => $invoice->id,
+        'price' => 10,
+        'quantity' => 1,
+        'description' => 'Original',
+    ]);
+
+    $response = $this->actingAs($user)->postJson('/api/line_item/save', [
+        'id' => $lineItem->id,
+        'invoiceId' => $invoice->id,
+        'price' => 10,
+        'quantity' => 5,
+        'description' => 'Hijacked',
+    ]);
+
+    $response->assertJsonPath('status', 'failed');
+    $this->assertDatabaseHas('line_item', ['id' => $lineItem->id, 'description' => 'Original']);
+});
+
 test('get fails gracefully for a nonexistent line item', function () {
     $user = User::factory()->create();
 
@@ -87,7 +161,8 @@ test('get fails gracefully for a nonexistent line item', function () {
 
 test('save fails gracefully when updating a nonexistent line item', function () {
     $user = User::factory()->create();
-    $invoice = Invoice::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $user->id]);
+    $invoice = Invoice::factory()->create(['customerId' => $customer->id]);
 
     $response = $this->actingAs($user)->postJson('/api/line_item/save', [
         'id' => 999999,
@@ -103,7 +178,8 @@ test('save fails gracefully when updating a nonexistent line item', function () 
 
 test('save rejects a description longer than 64 characters', function () {
     $user = User::factory()->create();
-    $invoice = Invoice::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $user->id]);
+    $invoice = Invoice::factory()->create(['customerId' => $customer->id]);
 
     $response = $this->actingAs($user)->postJson('/api/line_item/save', [
         'id' => 0,

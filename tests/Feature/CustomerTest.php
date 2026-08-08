@@ -16,12 +16,23 @@ test('customer routes require authentication', function () {
 
 test('get returns a single customer', function () {
     $user = User::factory()->create();
-    $customer = Customer::factory()->create(['name' => 'Acme Corp']);
+    $customer = Customer::factory()->create(['userId' => $user->id, 'name' => 'Acme Corp']);
 
     $response = $this->actingAs($user)->getJson('/api/customer/' . $customer->id);
 
     $response->assertOk();
     $response->assertJsonPath('customer.name', 'Acme Corp');
+});
+
+test('a user cannot view another user\'s customer', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $other->id]);
+
+    $response = $this->actingAs($user)->getJson('/api/customer/' . $customer->id);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
 });
 
 test('save creates a new customer when id is 0', function () {
@@ -34,12 +45,12 @@ test('save creates a new customer when id is 0', function () {
 
     $response->assertOk();
     $response->assertJsonPath('status', 'success');
-    $this->assertDatabaseHas('customer', ['name' => 'New Customer LLC']);
+    $this->assertDatabaseHas('customer', ['name' => 'New Customer LLC', 'userId' => $user->id]);
 });
 
 test('save updates an existing customer', function () {
     $user = User::factory()->create();
-    $customer = Customer::factory()->create(['name' => 'Old Name']);
+    $customer = Customer::factory()->create(['userId' => $user->id, 'name' => 'Old Name']);
 
     $response = $this->actingAs($user)->postJson('/api/customer/save', [
         'id' => $customer->id,
@@ -49,6 +60,21 @@ test('save updates an existing customer', function () {
     $response->assertOk();
     $this->assertDatabaseHas('customer', ['id' => $customer->id, 'name' => 'New Name']);
     $this->assertDatabaseCount('customer', 1);
+});
+
+test('a user cannot update another user\'s customer', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $other->id, 'name' => 'Old Name']);
+
+    $response = $this->actingAs($user)->postJson('/api/customer/save', [
+        'id' => $customer->id,
+        'name' => 'Hijacked Name',
+    ]);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+    $this->assertDatabaseHas('customer', ['id' => $customer->id, 'name' => 'Old Name']);
 });
 
 test('get fails gracefully for a nonexistent customer', function () {
@@ -86,7 +112,7 @@ test('save rejects a name longer than 64 characters', function () {
 
 test('getTableData returns a balance summary per customer', function () {
     $user = User::factory()->create();
-    $customer = Customer::factory()->create(['name' => 'Acme Corp']);
+    $customer = Customer::factory()->create(['userId' => $user->id, 'name' => 'Acme Corp']);
     Invoice::factory()->create(['customerId' => $customer->id, 'amount' => 100]);
     Payment::factory()->create(['customerId' => $customer->id, 'amount' => 40]);
 
@@ -100,9 +126,23 @@ test('getTableData returns a balance summary per customer', function () {
     expect((float) $row['balance'])->toBe(-60.0);
 });
 
+test('getTableData only includes the authenticated user\'s customers', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    Customer::factory()->create(['userId' => $user->id, 'name' => 'Mine']);
+    Customer::factory()->create(['userId' => $other->id, 'name' => 'Theirs']);
+
+    $response = $this->actingAs($user)->getJson('/api/customer/tabledata');
+
+    $response->assertOk();
+    $names = collect($response->json('customers'))->pluck('name');
+    expect($names)->toContain('Mine');
+    expect($names)->not->toContain('Theirs');
+});
+
 test('getBalanceData returns merged transactions with a running balance', function () {
     $user = User::factory()->create();
-    $customer = Customer::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $user->id]);
     Invoice::factory()->create([
         'customerId' => $customer->id,
         'amount' => 100,
@@ -124,4 +164,15 @@ test('getBalanceData returns merged transactions with a running balance', functi
     expect($transactions)->toHaveCount(2);
     // running balance after both entries: -100 (invoice) + 40 (payment)
     expect((float) $transactions[1]['balance'])->toBe(-60.0);
+});
+
+test('a user cannot view another user\'s balance data', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $customer = Customer::factory()->create(['userId' => $other->id]);
+
+    $response = $this->actingAs($user)->getJson('/api/customer/balance/' . $customer->id);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
 });
