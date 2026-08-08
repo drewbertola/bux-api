@@ -48,6 +48,23 @@ class AppServiceProvider extends ServiceProvider
                 });
             });
 
+        // 'login' throttles by email, which stops someone hammering one
+        // address but does nothing about a bot spinning up many distinct
+        // throwaway accounts from a single IP — cap that separately.
+        RateLimiter::for('register', function (Request $request) {
+            $attempts = (config('app.env') === 'local') ? 1000 : 20;
+
+            return
+                Limit::perMinute($attempts)->by($request->ip())
+                    ->response(function (Request $request, array $headers) {
+                        return response()->json([
+                            'status' => 'Request failed.',
+                            'message' => 'Too many registration attempts.  Please try again in a few minutes.',
+                            'data' => [],
+                        ], 200);
+                    });
+        });
+
         // Override the package's default responses so passkey ceremonies
         // return this app's HttpResponses envelope (and, for login, a Sanctum
         // token) instead of the package's redirect/Blade-oriented defaults.

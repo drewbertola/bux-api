@@ -16,7 +16,7 @@ use Laravel\Passkeys\Http\Controllers\PasskeyRegistrationController;
 Route::post('/login', [AuthController::class, 'login'])
     ->middleware(ThrottleRequests::using('login'));
 Route::post('/register', [AuthController::class, 'register'])
-    ->middleware(ThrottleRequests::using('login'));
+    ->middleware([ThrottleRequests::using('login'), ThrottleRequests::using('register')]);
 Route::post('/forgot', [AuthController::class, 'passwordResetCode'])
     ->middleware(ThrottleRequests::using('login'));
 Route::post('/update-password', [AuthController::class, 'changePassword'])
