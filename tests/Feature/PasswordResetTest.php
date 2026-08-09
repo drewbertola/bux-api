@@ -83,11 +83,12 @@ test('resetting the password fails when the new passwords do not match', functio
     $response->assertJsonStructure(['errors' => ['newPassword2']]);
 });
 
-test('an authenticated user can change their password without a code', function () {
+test('an authenticated user can change their password by providing the current one', function () {
     $user = User::factory()->create(['password' => Hash::make('old-password')]);
 
     $response = $this->actingAs($user)->postJson('/api/update-password', [
         'email' => $user->email,
+        'password' => 'old-password',
         'newPassword' => 'new-password-1',
         'newPassword2' => 'new-password-1',
     ]);
@@ -99,12 +100,44 @@ test('an authenticated user can change their password without a code', function 
     expect(Hash::check('new-password-1', $user->password))->toBeTrue();
 });
 
+test('an authenticated user cannot change their password without providing the current one', function () {
+    $user = User::factory()->create(['password' => Hash::make('old-password')]);
+
+    $response = $this->actingAs($user)->postJson('/api/update-password', [
+        'email' => $user->email,
+        'newPassword' => 'new-password-1',
+        'newPassword2' => 'new-password-1',
+    ]);
+
+    $response->assertJsonPath('status', 'failed');
+
+    $user->refresh();
+    expect(Hash::check('old-password', $user->password))->toBeTrue();
+});
+
+test('an authenticated user cannot change their password with the wrong current password', function () {
+    $user = User::factory()->create(['password' => Hash::make('old-password')]);
+
+    $response = $this->actingAs($user)->postJson('/api/update-password', [
+        'email' => $user->email,
+        'password' => 'not-the-right-password',
+        'newPassword' => 'new-password-1',
+        'newPassword2' => 'new-password-1',
+    ]);
+
+    $response->assertJsonPath('status', 'failed');
+
+    $user->refresh();
+    expect(Hash::check('old-password', $user->password))->toBeTrue();
+});
+
 test('changing the password revokes the user\'s existing tokens', function () {
     $user = User::factory()->create(['password' => Hash::make('old-password')]);
     $token = $user->createToken('test');
 
     $this->actingAs($user)->postJson('/api/update-password', [
         'email' => $user->email,
+        'password' => 'old-password',
         'newPassword' => 'new-password-1',
         'newPassword2' => 'new-password-1',
     ])->assertOk();

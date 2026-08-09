@@ -138,6 +138,15 @@ class AuthController extends Controller
                     'errors' => ['token' => ['The code did not match our records.']],
                 ], 'One or more errors were encountered.');
             }
+        } else {
+            // already logged in: prove knowledge of the current password
+            // before allowing a change, so a hijacked session alone isn't
+            // enough to take over the account
+            if (empty($request->input('password')) || !Hash::check($request->input('password'), $user->password)) {
+                return $this->error([
+                    'errors' => ['password' => ['The current password is incorrect.']],
+                ], 'One or more errors were encountered.');
+            }
         }
 
         $data = [];
