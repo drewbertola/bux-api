@@ -11,7 +11,7 @@ test('completions requires authentication', function () {
 
 test('completions returns customer names and the static methods list', function () {
     $user = User::factory()->create();
-    Customer::factory()->create(['name' => 'Acme Corp']);
+    Customer::factory()->create(['user_id' => $user->id, 'name' => 'Acme Corp']);
 
     $response = $this->actingAs($user)->getJson('/api/completions');
 
@@ -19,4 +19,14 @@ test('completions returns customer names and the static methods list', function 
     $response->assertJsonPath('status', 'success');
     $response->assertJsonFragment(['label' => 'Acme Corp']);
     expect($response->json('methods'))->toHaveCount(4);
+});
+
+test('completions does not include another user\'s customers', function () {
+    $user = User::factory()->create();
+    Customer::factory()->create(['name' => 'Someone Else Inc']);
+
+    $response = $this->actingAs($user)->getJson('/api/completions');
+
+    $response->assertOk();
+    $response->assertJsonMissing(['label' => 'Someone Else Inc']);
 });
