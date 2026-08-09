@@ -3,10 +3,16 @@
 namespace App\Services;
 
 class VerificationCodeService {
+    private const ALPHABET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
     public static function generate()
     {
-        return substr(str_shuffle(
-            str_repeat("aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ", 6)
-        ), 0, 8);
+        $code = '';
+
+        for ($i = 0; $i < 8; $i++) {
+            $code .= self::ALPHABET[random_int(0, strlen(self::ALPHABET) - 1)];
+        }
+
+        return $code;
     }
 }
