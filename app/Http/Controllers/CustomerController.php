@@ -28,7 +28,7 @@ class CustomerController
      */
     public function get(string $id)
     {
-        $customer = Customer::find($id);
+        $customer = Customer::where('user_id', Auth::id())->find($id);
 
         if (empty($customer)) {
             return $this->error([], 'Customer not found.');
@@ -61,9 +61,11 @@ class CustomerController
         unset($data['updated_at']);
 
         if (empty($customerId)) {
-            $customer = Customer::create($data);
+            $customer = new Customer($data);
+            $customer->user_id = Auth::id();
+            $customer->save();
         } else {
-            $customer = Customer::find($customerId);
+            $customer = Customer::where('user_id', Auth::id())->find($customerId);
 
             if (empty($customer)) {
                 return $this->error([], 'Customer not found.');
@@ -83,14 +85,23 @@ class CustomerController
      */
     public function delete(Customer $customer)
     {
+        if ($customer->user_id !== Auth::id()) {
+            return $this->error([], 'Customer not found.');
+        }
+
         return $customer->delete();
     }
 
     public function getBalanceData(string $customerId)
     {
-        $customer = Customer::find($customerId);
-        $invoices = Invoice::where('customerId', $customerId)->get();
-        $payments = Payment::where('customerId', $customerId)->get();
+        $customer = Customer::where('user_id', Auth::id())->find($customerId);
+
+        if (empty($customer)) {
+            return $this->error([], 'Customer not found.');
+        }
+
+        $invoices = Invoice::where('customerId', $customerId)->where('user_id', Auth::id())->get();
+        $payments = Payment::where('customerId', $customerId)->where('user_id', Auth::id())->get();
 
         $entries = [];
 
@@ -130,6 +141,7 @@ class CustomerController
     public function getTableData()
     {
         $invoice = DB::table('invoice')
+            ->where('user_id', Auth::id())
             ->select('customerId',
                 DB::raw('max(id) as id'),
                 DB::raw('sum(amount) as amount'),
@@ -137,6 +149,7 @@ class CustomerController
             ->groupBy('customerId');
 
         $payment = DB::table('payment')
+            ->where('user_id', Auth::id())
             ->select('customerId',
                 DB::raw('max(id) as id'),
                 DB::raw('sum(amount) as amount'),
@@ -145,6 +158,7 @@ class CustomerController
 
 
         $results = DB::table('customer')
+            ->where('customer.user_id', Auth::id())
             ->select(
                 'customer.id as id',
                 'customer.archive as archive',

@@ -12,6 +12,7 @@ class LineItem extends Model
     protected $table = 'line_item';
 
     protected $fillable = [
+        'user_id',
         'invoiceId',
         'price',
         'units',

@@ -21,14 +21,16 @@ class InvoiceController
      */
     public function index()
     {
-        $data = InvoiceResource::collection(Invoice::orderBy('id', 'desc')->get());
+        $data = InvoiceResource::collection(
+            Invoice::where('user_id', Auth::id())->orderBy('id', 'desc')->get()
+        );
 
         return $this->success(['invoices' => $data]);
     }
 
     public function get(string $id)
     {
-        $invoice = Invoice::find($id);
+        $invoice = Invoice::where('user_id', Auth::id())->find($id);
 
         if (empty($invoice)) {
             return $this->error([], 'Invoice not found.');
@@ -43,7 +45,7 @@ class InvoiceController
     public function customer(string $customerId)
     {
         $data = InvoiceResource::collection(
-            Invoice::where('customerId', $customerId)->orderBy('id', 'desc')->get()
+            Invoice::where('customerId', $customerId)->where('user_id', Auth::id())->orderBy('id', 'desc')->get()
         );
 
         return $this->success(['invoices' => $data]);
@@ -69,10 +71,20 @@ class InvoiceController
         unset($data['created_at']);
         unset($data['updated_at']);
 
+        $ownsCustomer = Customer::where('id', $data['customerId'])
+            ->where('user_id', Auth::id())
+            ->exists();
+
+        if (!$ownsCustomer) {
+            return $this->error([], 'Customer not found.');
+        }
+
         if (empty($invoiceId)) {
-            $invoice = Invoice::create($data);
+            $invoice = new Invoice($data);
+            $invoice->user_id = Auth::id();
+            $invoice->save();
         } else {
-            $invoice = Invoice::find($invoiceId);
+            $invoice = Invoice::where('user_id', Auth::id())->find($invoiceId);
 
             if (empty($invoice)) {
                 return $this->error([], 'Invoice not found.');
@@ -94,7 +106,7 @@ class InvoiceController
             return redirect('/');
         }
 
-        $invoice = Invoice::find($id);
+        $invoice = Invoice::where('user_id', Auth::id())->find($id);
 
         if (empty($invoice)) {
             return $this->error([], 'Invoice not found.');
@@ -108,7 +120,12 @@ class InvoiceController
 
     public function pdf($id)
     {
-        $invoice = Invoice::where('id', $id)->first();
+        $invoice = Invoice::where('id', $id)->where('user_id', Auth::id())->first();
+
+        if (empty($invoice)) {
+            abort(404);
+        }
+
         $lineItems = LineItem::where('invoiceId', $invoice->id)->get();
         $customer = Customer::where('id', $invoice->customerId)->first();
 
@@ -129,6 +146,10 @@ class InvoiceController
      */
     public function delete(Invoice $invoice)
     {
+        if ($invoice->user_id !== Auth::id()) {
+            return $this->error([], 'Invoice not found.');
+        }
+
         return $invoice->delete();
     }
 }

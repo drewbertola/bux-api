@@ -22,7 +22,7 @@ class LineItemController
     public function index(string $invoiceId)
     {
         $data = LineItemResource::collection(
-            LineItem::where('invoiceId', $invoiceId)->get()
+            LineItem::where('invoiceId', $invoiceId)->where('user_id', Auth::id())->get()
         );
 
         return $this->success(['lineItems' => $data]);
@@ -30,7 +30,7 @@ class LineItemController
 
     public function get(string $id)
     {
-        $lineItem = LineItem::find($id);
+        $lineItem = LineItem::where('user_id', Auth::id())->find($id);
 
         if (empty($lineItem)) {
             return $this->error([], 'Line item not found.');
@@ -59,10 +59,20 @@ class LineItemController
         unset($data['created_at']);
         unset($data['updated_at']);
 
+        $ownsInvoice = Invoice::where('id', $data['invoiceId'])
+            ->where('user_id', Auth::id())
+            ->exists();
+
+        if (!$ownsInvoice) {
+            return $this->error([], 'Invoice not found.');
+        }
+
         if (empty($lineItemId)) {
-            $lineItem = LineItem::create($data);
+            $lineItem = new LineItem($data);
+            $lineItem->user_id = Auth::id();
+            $lineItem->save();
         } else {
-            $lineItem = LineItem::find($lineItemId);
+            $lineItem = LineItem::where('user_id', Auth::id())->find($lineItemId);
 
             if (empty($lineItem)) {
                 return $this->error([], 'Line item not found.');

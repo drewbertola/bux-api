@@ -16,8 +16,8 @@ test('invoice routes require authentication', function () {
 
 test('index lists invoices newest first', function () {
     $user = User::factory()->create();
-    $older = Invoice::factory()->create();
-    $newer = Invoice::factory()->create();
+    $older = Invoice::factory()->create(['user_id' => $user->id]);
+    $newer = Invoice::factory()->create(['user_id' => $user->id]);
 
     $response = $this->actingAs($user)->getJson('/api/invoice');
 
@@ -27,9 +27,20 @@ test('index lists invoices newest first', function () {
     expect($ids->last())->toBe((string) $older->id);
 });
 
+test('index does not include another user\'s invoices', function () {
+    $user = User::factory()->create();
+    Invoice::factory()->create(['user_id' => $user->id]);
+    Invoice::factory()->create();
+
+    $response = $this->actingAs($user)->getJson('/api/invoice');
+
+    $response->assertOk();
+    expect($response->json('invoices'))->toHaveCount(1);
+});
+
 test('get returns a single invoice', function () {
     $user = User::factory()->create();
-    $invoice = Invoice::factory()->create(['note' => 'Net 30']);
+    $invoice = Invoice::factory()->create(['user_id' => $user->id, 'note' => 'Net 30']);
 
     $response = $this->actingAs($user)->getJson('/api/invoice/' . $invoice->id);
 
@@ -37,9 +48,19 @@ test('get returns a single invoice', function () {
     $response->assertJsonPath('invoice.note', 'Net 30');
 });
 
+test('get cannot return another user\'s invoice', function () {
+    $user = User::factory()->create();
+    $otherUsersInvoice = Invoice::factory()->create();
+
+    $response = $this->actingAs($user)->getJson('/api/invoice/' . $otherUsersInvoice->id);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+});
+
 test('save creates a new invoice when id is 0', function () {
     $user = User::factory()->create();
-    $customer = Customer::factory()->create();
+    $customer = Customer::factory()->create(['user_id' => $user->id]);
 
     $response = $this->actingAs($user)->postJson('/api/invoice/save', [
         'id' => 0,
@@ -48,12 +69,28 @@ test('save creates a new invoice when id is 0', function () {
     ]);
 
     $response->assertOk();
-    $this->assertDatabaseHas('invoice', ['customerId' => $customer->id, 'date' => '2026-01-15']);
+    $this->assertDatabaseHas('invoice', ['customerId' => $customer->id, 'date' => '2026-01-15', 'user_id' => $user->id]);
+});
+
+test('save rejects creating an invoice against another user\'s customer', function () {
+    $user = User::factory()->create();
+    $otherUsersCustomer = Customer::factory()->create();
+
+    $response = $this->actingAs($user)->postJson('/api/invoice/save', [
+        'id' => 0,
+        'customerId' => $otherUsersCustomer->id,
+        'date' => '2026-01-15',
+    ]);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+    $this->assertDatabaseMissing('invoice', ['customerId' => $otherUsersCustomer->id]);
 });
 
 test('save updates an existing invoice', function () {
     $user = User::factory()->create();
-    $invoice = Invoice::factory()->create(['note' => 'Original']);
+    $customer = Customer::factory()->create(['user_id' => $user->id]);
+    $invoice = Invoice::factory()->create(['user_id' => $user->id, 'customerId' => $customer->id, 'note' => 'Original']);
 
     $response = $this->actingAs($user)->postJson('/api/invoice/save', [
         'id' => $invoice->id,
@@ -67,6 +104,23 @@ test('save updates an existing invoice', function () {
     $this->assertDatabaseCount('invoice', 1);
 });
 
+test('save cannot update another user\'s invoice', function () {
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create(['user_id' => $user->id]);
+    $otherUsersInvoice = Invoice::factory()->create(['note' => 'Untouched']);
+
+    $response = $this->actingAs($user)->postJson('/api/invoice/save', [
+        'id' => $otherUsersInvoice->id,
+        'customerId' => $customer->id,
+        'date' => '2026-01-15',
+        'note' => 'Hijacked',
+    ]);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+    $this->assertDatabaseHas('invoice', ['id' => $otherUsersInvoice->id, 'note' => 'Untouched']);
+});
+
 test('get fails gracefully for a nonexistent invoice', function () {
     $user = User::factory()->create();
 
@@ -78,7 +132,7 @@ test('get fails gracefully for a nonexistent invoice', function () {
 
 test('save fails gracefully when updating a nonexistent invoice', function () {
     $user = User::factory()->create();
-    $customer = Customer::factory()->create();
+    $customer = Customer::factory()->create(['user_id' => $user->id]);
 
     $response = $this->actingAs($user)->postJson('/api/invoice/save', [
         'id' => 999999,
@@ -101,7 +155,7 @@ test('toggleSent fails gracefully for a nonexistent invoice', function () {
 
 test('save rejects a missing date', function () {
     $user = User::factory()->create();
-    $customer = Customer::factory()->create();
+    $customer = Customer::factory()->create(['user_id' => $user->id]);
 
     $response = $this->actingAs($user)->postJson('/api/invoice/save', [
         'id' => 0,
@@ -114,7 +168,7 @@ test('save rejects a missing date', function () {
 
 test('toggleSent flips the emailed flag', function () {
     $user = User::factory()->create();
-    $invoice = Invoice::factory()->create(['emailed' => 'N']);
+    $invoice = Invoice::factory()->create(['user_id' => $user->id, 'emailed' => 'N']);
 
     $response = $this->actingAs($user)->getJson('/api/invoice/sent/' . $invoice->id);
     $response->assertOk();
@@ -124,12 +178,23 @@ test('toggleSent flips the emailed flag', function () {
     expect($invoice->fresh()->emailed)->toBe('N');
 });
 
+test('toggleSent cannot modify another user\'s invoice', function () {
+    $user = User::factory()->create();
+    $otherUsersInvoice = Invoice::factory()->create(['emailed' => 'N']);
+
+    $response = $this->actingAs($user)->getJson('/api/invoice/sent/' . $otherUsersInvoice->id);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'failed');
+    expect($otherUsersInvoice->fresh()->emailed)->toBe('N');
+});
+
 test('customer route only returns that customer\'s invoices', function () {
     $user = User::factory()->create();
-    $customerA = Customer::factory()->create();
-    $customerB = Customer::factory()->create();
-    Invoice::factory()->create(['customerId' => $customerA->id]);
-    Invoice::factory()->create(['customerId' => $customerB->id]);
+    $customerA = Customer::factory()->create(['user_id' => $user->id]);
+    $customerB = Customer::factory()->create(['user_id' => $user->id]);
+    Invoice::factory()->create(['user_id' => $user->id, 'customerId' => $customerA->id]);
+    Invoice::factory()->create(['user_id' => $user->id, 'customerId' => $customerB->id]);
 
     $response = $this->actingAs($user)->getJson('/api/invoice/customer/' . $customerA->id);
 
@@ -137,4 +202,16 @@ test('customer route only returns that customer\'s invoices', function () {
     $invoices = $response->json('invoices');
     expect($invoices)->toHaveCount(1);
     expect($invoices[0]['customerId'])->toBe((string) $customerA->id);
+});
+
+test('customer route does not include another user\'s invoices', function () {
+    $user = User::factory()->create();
+    $customer = Customer::factory()->create(['user_id' => $user->id]);
+    Invoice::factory()->create(['user_id' => $user->id, 'customerId' => $customer->id]);
+    Invoice::factory()->create(['customerId' => $customer->id]);
+
+    $response = $this->actingAs($user)->getJson('/api/invoice/customer/' . $customer->id);
+
+    $response->assertOk();
+    expect($response->json('invoices'))->toHaveCount(1);
 });

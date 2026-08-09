@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Invoice;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -18,6 +19,7 @@ class LineItemFactory extends Factory
     public function definition(): array
     {
         return [
+            'user_id' => User::factory(),
             'invoiceId' => Invoice::factory(),
             'price' => fake()->randomFloat(2, 5, 200),
             'units' => 'ea',

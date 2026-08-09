@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\PaymentRequest;
 use App\Http\Resources\PaymentResource;
+use App\Models\Customer;
 use App\Models\Payment;
 use App\Traits\HttpResponses;
 use Illuminate\Http\Request;
@@ -18,14 +19,16 @@ class PaymentController
      */
     public function index()
     {
-        $data = PaymentResource::collection(Payment::orderBy('id', 'desc')->get());
+        $data = PaymentResource::collection(
+            Payment::where('user_id', Auth::id())->orderBy('id', 'desc')->get()
+        );
 
         return $this->success(['payments' => $data]);
     }
 
     public function get(string $id)
     {
-        $payment = Payment::find($id);
+        $payment = Payment::where('user_id', Auth::id())->find($id);
 
         if (empty($payment)) {
             return $this->error([], 'Payment not found.');
@@ -40,7 +43,7 @@ class PaymentController
     public function customer(string $customerId)
     {
         $data = PaymentResource::collection(
-            Payment::where('customerId', $customerId)->orderBy('id', 'desc')->get()
+            Payment::where('customerId', $customerId)->where('user_id', Auth::id())->orderBy('id', 'desc')->get()
         );
 
         return $this->success(['payments' => $data]);
@@ -66,10 +69,20 @@ class PaymentController
         unset($data['created_at']);
         unset($data['updated_at']);
 
+        $ownsCustomer = Customer::where('id', $data['customerId'])
+            ->where('user_id', Auth::id())
+            ->exists();
+
+        if (!$ownsCustomer) {
+            return $this->error([], 'Customer not found.');
+        }
+
         if (empty($paymentId)) {
-            $payment = Payment::create($data);
+            $payment = new Payment($data);
+            $payment->user_id = Auth::id();
+            $payment->save();
         } else {
-            $payment = Payment::find($paymentId);
+            $payment = Payment::where('user_id', Auth::id())->find($paymentId);
 
             if (empty($payment)) {
                 return $this->error([], 'Payment not found.');
@@ -89,6 +102,10 @@ class PaymentController
      */
     public function delete(Payment $payment)
     {
+        if ($payment->user_id !== Auth::id()) {
+            return $this->error([], 'Payment not found.');
+        }
+
         return $payment->delete();
     }
 }
