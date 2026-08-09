@@ -14,14 +14,13 @@ class PasswordResetCodeRequest
     public static function rules(): array
     {
         return [
-            'email' => 'required|email:rfc,strict|exists:users,email',
+            'email' => 'required|email:rfc,strict',
         ];
     }
 
     public static function messages(): array
     {
         return [
-            'email.exists' => 'The email address was not found in our system.',
             'email' => 'A valid email is required.',
         ];
     }

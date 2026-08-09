@@ -85,16 +85,19 @@ class AuthController extends Controller
 
         $user = User::where('email', $validator->safe()->only('email'))->first();
 
-        $data = ['verification_code' => VerificationCodeService::generate()];
+        // don't reveal whether the email is registered — respond with the
+        // same generic message either way, and only actually email/issue
+        // a code if there's an account to send it to
+        if ($user) {
+            $user->update(['verification_code' => VerificationCodeService::generate()]);
 
-        $user->update($data);
-
-        Mail::to($user->email)->send(new ForgotPasswordEmail($user));
+            Mail::to($user->email)->send(new ForgotPasswordEmail($user));
+        }
 
         return $this->success(
             [],
-            'A password recovery email has been sent.  Please check your ' .
-            'inbox and spam folders.'
+            'If that email address is in our system, a password recovery ' .
+            'email has been sent. Please check your inbox and spam folders.'
         );
     }
 

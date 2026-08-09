@@ -20,12 +20,14 @@ test('requesting a reset code emails the user and stores a verification code', f
     Mail::assertSent(ForgotPasswordEmail::class, fn ($mail) => $mail->hasTo($user->email));
 });
 
-test('requesting a reset code fails for an unknown email', function () {
+test('requesting a reset code for an unknown email still returns the generic success message', function () {
     Mail::fake();
 
+    // must not reveal via the response whether the email is registered
     $response = $this->postJson('/api/forgot', ['email' => 'nobody@example.com']);
 
-    $response->assertJsonPath('status', 'failed');
+    $response->assertOk();
+    $response->assertJsonPath('status', 'success');
     Mail::assertNothingSent();
 });
 
