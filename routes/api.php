@@ -60,6 +60,7 @@ Route::group(['middleware' => ['auth:sanctum']], function() {
 
     Route::get('/webauthn/passkeys', [PasskeyController::class, 'index']);
     Route::get('/webauthn/register/options', [PasskeyRegistrationController::class, 'index']);
-    Route::post('/webauthn/register', [PasskeyRegistrationController::class, 'store']);
+    Route::post('/webauthn/register', [PasskeyRegistrationController::class, 'store'])
+        ->middleware('require.password');
     Route::delete('/webauthn/passkeys/{passkey}', [PasskeyRegistrationController::class, 'destroy']);
 });

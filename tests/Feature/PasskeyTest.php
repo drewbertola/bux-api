@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 
 function fakePasskeyCredential(User $user, string $name): void
 {
@@ -24,6 +25,31 @@ test('protected passkey routes require authentication', function () {
     $this->getJson('/api/webauthn/register/options')->assertStatus(401);
     $this->postJson('/api/webauthn/register', [])->assertStatus(401);
     $this->deleteJson('/api/webauthn/passkeys/1')->assertStatus(401);
+});
+
+test('registering a passkey requires the current password', function () {
+    $user = User::factory()->create(['password' => Hash::make('password')]);
+
+    $response = $this->actingAs($user)->postJson('/api/webauthn/register', [
+        'name' => 'Attacker\'s Device',
+        'credential' => ['id' => 'x', 'rawId' => 'x', 'type' => 'public-key', 'response' => []],
+    ]);
+
+    $response->assertJsonPath('status', 'failed');
+    expect($user->passkeys()->count())->toBe(0);
+});
+
+test('registering a passkey rejects the wrong current password', function () {
+    $user = User::factory()->create(['password' => Hash::make('password')]);
+
+    $response = $this->actingAs($user)->postJson('/api/webauthn/register', [
+        'password' => 'wrong-password',
+        'name' => 'Attacker\'s Device',
+        'credential' => ['id' => 'x', 'rawId' => 'x', 'type' => 'public-key', 'response' => []],
+    ]);
+
+    $response->assertJsonPath('status', 'failed');
+    expect($user->passkeys()->count())->toBe(0);
 });
 
 test('login options are available to guests', function () {
