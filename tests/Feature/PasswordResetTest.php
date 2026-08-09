@@ -69,6 +69,30 @@ test('resetting the password fails with the wrong code', function () {
     expect(Hash::check('old-password', $user->password))->toBeTrue();
 });
 
+test('a still-logged-in user can still reset via a valid code, without the current password', function () {
+    $user = User::factory()->create([
+        'verification_code' => 'ABC12345',
+        'password' => Hash::make('old-password'),
+    ]);
+
+    // a stale/still-valid session must not force the reset flow through
+    // the "already logged in" path — that would require the very
+    // password the user is trying to recover because they don't have it
+    $response = $this->actingAs($user)->postJson('/api/update-password', [
+        'email' => $user->email,
+        'token' => 'ABC12345',
+        'newPassword' => 'new-password-1',
+        'newPassword2' => 'new-password-1',
+    ]);
+
+    $response->assertOk();
+    $response->assertJsonPath('status', 'success');
+
+    $user->refresh();
+    expect($user->verification_code)->toBe('');
+    expect(Hash::check('new-password-1', $user->password))->toBeTrue();
+});
+
 test('resetting the password fails when the new passwords do not match', function () {
     $user = User::factory()->create(['verification_code' => 'ABC12345']);
 

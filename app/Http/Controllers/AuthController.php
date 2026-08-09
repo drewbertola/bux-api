@@ -118,8 +118,12 @@ class AuthController extends Controller
         // is this an update (not forgot password / reset)?
         $user = Auth::user();
 
-        // no user, then it is a forgot password / reset
-        if (empty($user)) {
+        // a submitted token always means this is a forgot-password/reset
+        // attempt, even if the browser happens to still hold a session for
+        // some other account state — that's the scenario this flow exists
+        // for, and it must not be gated behind a password the user is, by
+        // definition, trying to recover because they don't have it.
+        if (empty($user) || !empty($request->input('token'))) {
             // check the code
             $user = User::where('email', $request->only('email'))->first();
 
